@@ -6,4 +6,4 @@ It does not run by itself, it must be added when compiling the OpenI6X port. Mor
 
 It is severely limited by the hardware sufficiency of the radio, call it what you will, and it is not possible to expect much from it.
 
-Also, this is my very first time in clang, so hate me as much as you can. Development continues,,,
+Also, this is my very first time in clang, so hate me as much as you can.
