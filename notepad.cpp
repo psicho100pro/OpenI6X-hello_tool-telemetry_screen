@@ -1,21 +1,17 @@
 #include "opentx.h"
 
 /*
-!!! SMLSIZE writes only capital letters and nums !!! the raster is too coarse
+!!! TINSIZE writes only capital letters and nums !!! the raster is too coarse
 due to the lack of space, the effort is to simplify everything
 */
 
 #define ROOF FH                                  // y lcd.h FH 8  pak smažu
-#define FLOOR(LCD_H - ROOF - 1)                  // y currently 55 , adjustable, it needs to be an even number cus center
-#define HCENTER(ROOF + ((FLOOR - 1 - ROOF) / 2)) // y currently 31
+#define FLOOR (LCD_H - ROOF - 1)                  // y currently 55 , adjustable, it needs to be an even number cus center
+#define HCENTER (ROOF + ((FLOOR - 1 - ROOF) / 2)) // y currently 31
 #define HORLLIM 0                                // x
 #define HORDLIM 97                               // x divid, adjustable, it needs to be an odd number cus center
-#define HORRLIM(LCD_W - 1)
-#define HORWCENTER((HORDLIM - 1) / 2) // x currently 48
-
-#define FW                             6 // pak smažu
-#define FWNUM                          5
-#define FH                             8
+#define HORRLIM (LCD_W - 1)
+#define HORWCENTER ((HORDLIM - 1) / 2) // x currently 48
 
 static const uint8_t lut[] = { // sin table fixed SCALE 6
 0,1,2,3,4,6,7,8,9,10,
@@ -39,6 +35,7 @@ int8_t fSinCos(float rad, bool f = 0) // 0=sin 1=cos // it is not very accurate,
   return (rad >= 0) ? ret : -ret;
 };
 
+
 uint8_t hYlimit(uint8_t val) // y over limit
 {
   if (ROOF >= val) return ROOF + 1;
@@ -46,18 +43,19 @@ uint8_t hYlimit(uint8_t val) // y over limit
   return val;
 };
 
-float hello_draw()
+void hello_draw()
 {
+
 uint8_t ahcx = HORWCENTER;             // TODO: same , so
 uint8_t ahcy = HCENTER;
 
 // ROOF bar:
 lcdDrawSolidFilledRect(0, 0, HORRLIM, ROOF);
 putsVolts(1, 1, g_vbat100mV, SMLSIZE | INVERS | (IS_TXBATT_WARNING() ? BLINK : 0));
-lcdDrawText(lcdNextPos + 2, 1, "TW:", SMLSIZE | INVERS);
-lcdDrawNumber(lcdNextPos + 2, 1, 100, SMLSIZE | INVERS);
-putsModelName(lcdNextPos + 2, 1, g_model.header.name, g_eeGeneral.currModel, SMLSIZE | INVERS);
-drawFlightMode(lcdNextPos + 2, 1, mixerCurrentFlightMode, SMLSIZE | INVERS);
+lcdDrawText(lcdNextPos + 1, 1, "TW:", SMLSIZE | INVERS);
+lcdDrawNumber(lcdNextPos, 1, telemetryItems[6].value, SMLSIZE | INVERS);
+//putsModelName(lcdNextPos + 1, 1, g_model.header.name, g_eeGeneral.currModel, SMLSIZE | INVERS);
+drawFlightMode(lcdNextPos + 1, 1, mixerCurrentFlightMode, SMLSIZE | INVERS);
 lcdDrawText(90, 1, "T:", SMLSIZE | INVERS);
 if (g_model.timers[0].mode)
 {
@@ -65,85 +63,60 @@ if (g_model.timers[0].mode)
 };
 
 // margin line
-// L ?
 lcdDrawLine(HORDLIM, ROOF, HORDLIM, FLOOR); // divid
-                                            // P ?
 
-// a.horizon:
-// TODO: the known phenomenon when turning upside down, the orientation is reversed within 180 degrees , it needs to be treated somehow  -one g sensor? + over 45°?
-
-// pitch
-ahcy = hYlimit(((uint16_t(42 /*FOV*/ << 6) * -fSinCos(0.52)) >> 12) + ahcy); // FOV fe. 45°=30, 40°=32, 35°=36 ,30°=42, 25°=60 - when the horizon touches ROOF or FLOOR
-// roll
-
-int8_t sin = fSinCos(0.52); //30°°
-int8_t cos = fSinCos(0.52, 1);
+int8_t sin = fSinCos(telemetryItems[15].value); //30°°
+int8_t cos = fSinCos(telemetryItems[15].value, 1);
 int16_t tan = (sin * (1 << 6) / cos); // 90° vyřešit potom
-// just horizon line // => memspace
-// lcdDrawLine(HORLLIM, ahcy + tan * HORLLIM + 1, HORDLIM - 1, ahcy - tan * HORDLIM - 1); // currently just -45° to + 45° limits are not completed
+
+  
+// pitch
+ahcy = hYlimit(((uint16_t(42 /*FOV*/ << 6) * -fSinCos(telemetryItems[14].value)) >> 12) + ahcy); // FOV fe. 45°=30, 40°=32, 35°=36 ,30°=42, 25°=60 - when the horizon touches ROOF or FLOOR
+// roll
 
 // ground fill // works // not yet => memspace
 for (uint8_t x = HORLLIM + 1; x < ahcx; x++)
 {
-              //48        //31
   lcdDrawLine(ahcx - x, hYlimit(ahcy + ((tan * uint16_t(x << 6)) >> 12)), ahcx - x, FLOOR - 1); // L
   lcdDrawLine(ahcx + x, hYlimit(ahcy - ((tan * uint16_t(x << 6)) >> 12)), ahcx + x, FLOOR - 1); // R
 };
 lcdDrawLine(ahcx, ahcy, ahcx, FLOOR - 1); // mid
 
-/* auxiliary 5s of °pitch not yet => memspace
-30 10 25 13 20 18 15 20 10 24 x = (x - ahcx) * cos + (y - ahcy) * sin + ahcx;
-y = (x - ahcx) * -sin + (y - ahcy) * cos + ahcy;
-*/
 
-// crosshair :D
-lcdDrawLine(HORWCENTER, HCENTER - 1, HORWCENTER, HCENTER + 1);
-lcdDrawLine(HORWCENTER - 1, HCENTER, HORWCENTER + 1, HCENTER);
-lcdDrawLine(HORWCENTER - 6, HCENTER, HORWCENTER - 6, HCENTER + 3);
-lcdDrawLine(HORWCENTER + 6, HCENTER, HORWCENTER + 6, HCENTER + 3);
-lcdDrawLine(HORWCENTER + 7, HCENTER, HORWCENTER + 15, HCENTER);
-lcdDrawLine(HORWCENTER - 15, HCENTER, HORWCENTER - 7, HCENTER);
-// yaw
-lcdDrawNumber(HORWCENTER - 2 * FWNUM + 3, FLOOR - FH + 1, 365, SMLSIZE | INVERS);
 
-/* compass arow 2line angel 30° rotate //have not started yet => memspace
-lcdDrawLine(x + 1, y, x + 5, y + 4, SOLID, att);
-lcdDrawLine(x + 1, y, x + 5, y + 4, SOLID, att);
-//lower 5 ||| W  |||  S  |||
-loop wide/10?
-lcdDrawLine(x + 1, y, x + 5, y + 4, SOLID, att);
-*/
-// side indicators // FORCE=black // ERASE=white       // jeden ctverec obdelnik druhy vymazat obsah a pak pismo
-lcdDrawFilledRect(HORLLIM, HCENTER - 5, FWNUM * 3 + 2, 10, SOLID, FORCE);
-lcdDrawFilledRect(HORLLIM, HCENTER - 4, FWNUM * 3 + 1, 8, SOLID, ERASE);
-lcdDrawNumber(HORLLIM + 1, HCENTER - 3, 888, SMLSIZE);
+  // crosshair :D
+  lcdDrawLine(HORWCENTER, HCENTER - 1, HORWCENTER, HCENTER + 1);
+  lcdDrawLine(HORWCENTER - 1, HCENTER, HORWCENTER + 1, HCENTER);
+  lcdDrawLine(HORWCENTER - 6, HCENTER, HORWCENTER - 6, HCENTER + 3);
+  lcdDrawLine(HORWCENTER + 6, HCENTER, HORWCENTER + 6, HCENTER + 3);
+  lcdDrawLine(HORWCENTER + 7, HCENTER, HORWCENTER + 15, HCENTER);
+  lcdDrawLine(HORWCENTER - 15, HCENTER, HORWCENTER - 7, HCENTER);
+  // yaw
+  lcdDrawNumber(HORWCENTER - 2 * FWNUM + 3, FLOOR - FH + 1, 365, SMLSIZE | INVERS);
+
+  // side indicators
+lcdDrawFilledRect(HORLLIM + 1, HCENTER - 5, FWNUM * 3 + 2, 10, SOLID, FORCE);
+lcdDrawFilledRect(HORLLIM + 1, HCENTER - 4, FWNUM * 3 + 1, 8, SOLID, ERASE);
+lcdDrawNumber(HORLLIM + 2, HCENTER - 3, 888, SMLSIZE);
 lcdDrawFilledRect(HORDLIM - FWNUM * 3 - 2, HCENTER - 5, FWNUM * 3 + 2, 10, SOLID, FORCE);
 lcdDrawFilledRect(HORDLIM - FWNUM * 3 - 1, HCENTER - 4, FWNUM * 3 + 1, 8, SOLID, ERASE);
-lcdDrawNumber(HORDLIM - FWNUM * 3, HCENTER - 3, 888, SMLSIZE);
+lcdDrawNumber(HORDLIM - FWNUM * 3, HCENTER - 3, telemetryItems[16].value, SMLSIZE);
 
-// rigth block: // not completed
+  // rigth block: // not completed
 lcdDrawText(HORRLIM - 20, ROOF + 2, "S:", SMLSIZE);     // blink?
 lcdDrawNumber(HORRLIM, ROOF + 2, 5, SMLSIZE | RIGHT);   // count of sats
 lcdDrawNumber(HORRLIM, ROOF + 10, 10, SMLSIZE | RIGHT); //  drawValueWithUnit ??
-// lcdDrawGauge(x,y,val);  //batt cap gauge telemetryItems[i].value not yet // +  ticks not yet => memspace
 
-// FLOOR bar:
+  // FLOOR bar:
 lcdDrawSolidFilledRect(0, FLOOR + 1, HORRLIM, FLOOR + 1);
-putsVolts(1, FLOOR + 2, 1260 /*telemetryItems[rxbat].value*/, SMLSIZE | INVERS); // 12 . 6V
-lcdDrawText(lcdNextPos + 2, FLOOR + 2, "RS:", SMLSIZE | INVERS);
-lcdDrawNumber(lcdNextPos + 2, FLOOR + 2, 99, SMLSIZE | INVERS); // 99  TODO: blink telem off?
-lcdDrawText(lcdNextPos + 2, FLOOR + 2, "RQ:", SMLSIZE | INVERS);
-lcdDrawNumber(lcdNextPos + 2, FLOOR + 2, 100, SMLSIZE | INVERS); // 100
+putsVolts(1, FLOOR + 2, telemetryItems[10].value, SMLSIZE | INVERS); // 12 . 6
+lcdDrawText(lcdNextPos + 1, FLOOR + 2, "RS:", SMLSIZE | INVERS);
+lcdDrawNumber(lcdNextPos, FLOOR + 2, 99, SMLSIZE | INVERS); // 99  TODO: blink telem off?
+lcdDrawText(lcdNextPos + 1, FLOOR + 2, "RQ:", SMLSIZE | INVERS);
+lcdDrawNumber(lcdNextPos, FLOOR + 2, telemetryItems[2].value, SMLSIZE | INVERS); // 100
 
-// drawValueWithUnit(HORRLIM, FLOOR + 2, telemetryItems[/*STAB*/].value, /*TODO: unit*/'', SMLSIZE | INVERS | RIGHT); // STAB/HOR/ACRO
+}
 
-// TODO: alert window > no telemetr, lowbat
-// TODO: menu?
-
-// drawGPSSensorValue
-//  GET_TXBATT_BARS()
-// editSlider  ????
-};
 void hello_stop()
 {
   popMenu();
@@ -165,3 +138,6 @@ void hello_run(event_t event)
   lcdClear();
   hello_draw();
 };
+
+  
+  
