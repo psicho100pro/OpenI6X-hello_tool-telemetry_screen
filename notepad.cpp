@@ -5,13 +5,13 @@
 due to the lack of space, the effort is to simplify everything
 */
 
-#define ROOF FH                                  // y lcd.h FH 8  pak smažu
-#define FLOOR (LCD_H - ROOF - 1)                  // y currently 55 , adjustable, it needs to be an even number cus center
-#define HCENTER (ROOF + ((FLOOR - 1 - ROOF) / 2)) // y currently 31
+#define ROOF FH                                  
+#define FLOOR (LCD_H - ROOF - 1)                  // y adjustable, it needs to be an even number cus center
+#define HCENTER (ROOF + ((FLOOR - 1 - ROOF) / 2)) // y 
 #define HORLLIM 0                                // x
 #define HORDLIM 97                               // x divid, adjustable, it needs to be an odd number cus center
 #define HORRLIM (LCD_W - 1)
-#define HORWCENTER ((HORDLIM - 1) / 2) // x currently 48
+#define HORWCENTER ((HORDLIM - 1) / 2) // x 
 
 static const uint8_t lut[] = { // sin table fixed SCALE 6
 0,1,2,3,4,6,7,8,9,10,
@@ -24,7 +24,6 @@ static const uint8_t lut[] = { // sin table fixed SCALE 6
 int8_t fSinCos(float rad, bool f = 0) // 0=sin 1=cos // it is not very accurate, but the display is not very fine either
 {
 // the telemetry comes back in rads: 0°=0 ; 90°=1.57 ; 180°=3.14 ; 270°=4.71 ; 360°=6.28
-// int16_t ang = 180/3.14159*(f? rad + 1.57:rad) ;
   int32_t ang = ((f ? ((rad * (1 << 6)) + (uint8_t)100) : (rad * (1 << 6))) * ((uint16_t)11520 * (1 << 6) / (uint8_t)201));
   uint16_t ab = abs(ang>>12);
   int8_t ret;
@@ -59,22 +58,22 @@ drawFlightMode(lcdNextPos + 1, 1, mixerCurrentFlightMode, SMLSIZE | INVERS);
 lcdDrawText(90, 1, "T:", SMLSIZE | INVERS);
 if (g_model.timers[0].mode)
 {
-  drawTimer(lcdNextPos + 2, 1, timersStates[0].val, SMLSIZE | INVERS | (timersStates[0].val < 0 ? BLINK : 0)); // -00:00 este pozjistovat trochu
+  drawTimer(lcdNextPos + 2, 1, timersStates[0].val, SMLSIZE | INVERS | (timersStates[0].val < 0 ? BLINK : 0)); // -00:00
 };
 
 // margin line
 lcdDrawLine(HORDLIM, ROOF, HORDLIM, FLOOR); // divid
 
-int8_t sin = fSinCos(telemetryItems[15].value); //30°°
+int8_t sin = fSinCos(telemetryItems[15].value);
 int8_t cos = fSinCos(telemetryItems[15].value, 1);
-int16_t tan = (sin * (1 << 6) / cos); // 90° vyřešit potom
+int16_t tan = (sin * (1 << 6) / cos); // 90° fix later
 
   
 // pitch
 ahcy = hYlimit(((uint16_t(42 /*FOV*/ << 6) * -fSinCos(telemetryItems[14].value)) >> 12) + ahcy); // FOV fe. 45°=30, 40°=32, 35°=36 ,30°=42, 25°=60 - when the horizon touches ROOF or FLOOR
 // roll
 
-// ground fill // works // not yet => memspace
+// ground fill
 for (uint8_t x = HORLLIM + 1; x < ahcx; x++)
 {
   lcdDrawLine(ahcx - x, hYlimit(ahcy + ((tan * uint16_t(x << 6)) >> 12)), ahcx - x, FLOOR - 1); // L
@@ -101,11 +100,6 @@ lcdDrawNumber(HORLLIM + 2, HCENTER - 3, 888, SMLSIZE);
 lcdDrawFilledRect(HORDLIM - FWNUM * 3 - 2, HCENTER - 5, FWNUM * 3 + 2, 10, SOLID, FORCE);
 lcdDrawFilledRect(HORDLIM - FWNUM * 3 - 1, HCENTER - 4, FWNUM * 3 + 1, 8, SOLID, ERASE);
 lcdDrawNumber(HORDLIM - FWNUM * 3, HCENTER - 3, telemetryItems[16].value, SMLSIZE);
-
-  // rigth block: // not completed
-lcdDrawText(HORRLIM - 20, ROOF + 2, "S:", SMLSIZE);     // blink?
-lcdDrawNumber(HORRLIM, ROOF + 2, 5, SMLSIZE | RIGHT);   // count of sats
-lcdDrawNumber(HORRLIM, ROOF + 10, 10, SMLSIZE | RIGHT); //  drawValueWithUnit ??
 
   // FLOOR bar:
 lcdDrawSolidFilledRect(0, FLOOR + 1, HORRLIM, FLOOR + 1);
