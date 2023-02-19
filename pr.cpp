@@ -66,10 +66,6 @@ lcdDrawLine(HORDLIM, ROOF, HORDLIM, FLOOR); // divid
 uint8_t ahcy = HCENTER;
 ahcy = hYlimit(((uint16_t(FOV << 6) * -fSinCos(telemetryItems[19].value)) >> 12) + HCENTER);
 // roll
-  
- uint8_t ahcy = HCENTER;
-ahcy = hYlimit(((uint16_t(FOV << 6) * -fSinCos(telemetryItems[19].value)) >> 12) + HCENTER);
-// roll
 tgErrFlag = 0; // tangens 90°, 270°
 int8_t sin = fSinCos(telemetryItems[20].value);
 int8_t cos = fSinCos(telemetryItems[20].value, 1);
