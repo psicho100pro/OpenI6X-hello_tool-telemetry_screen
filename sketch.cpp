@@ -1,211 +1,204 @@
 #include "opentx.h"
 
-//!!! SMLSIZE writes only capital letters and nums !!! the raster is too coarse
-#define TOP FH
-#define FOOT (LCD_H - 1) // y adjustable
-#define HRLIM (LCD_W - 1) // x
-#define AHORLLIM 0
-#define AHORRLIM 94 // x splitsc/divid, adjustable
-#define AHORTOPLIM (TOP + 1)
-#define AHORFOOTLIM (FOOT - 1)
-#define AHORYCENTER (TOP + ((FOOT - 1 - TOP) / 2))
-#define AHORXCENTER (AHORRLIM / 2)
+#define RSSI telemetryData.rssi.value
+#define RSS1 telemetryData.rssi.value //RX_RSSI1_INDEX
+#define RSS2 telemetryData.rssi.value //RX_RSSI2_INDEX
+#define RQly (telemetryItems[2].value)  //RX_QUALITY_INDEX
+#define TPWR (telemetryItems[6].value)  //TX_POWER_INDEX
+//#define GPS  (telemetryItems[10].value) //coord  telemetryItem.gps.longitude telemetryItem.gps.latitude
+#define Sped (telemetryItems[11].value) //GPS_GROUND_SPEED_INDEX
+#define Hedg (telemetryItems[12].value) //GPS_HEADING_INDEX
+#define Alti (telemetryItems[13].value) //GPS_ALTITYE_INDEX
+#define Sats (telemetryItems[14].value) //GPS_SATELLITES_INDEX
+#define RxBt (telemetryItems[15].value) //BATT_VOLTAGE_INDEX
+#define Curr (telemetryItems[16].value) //BATT_CURRENT_INDEX
+#define Cons (telemetryItems[17].value) //BATT_CAPACITY_INDEX
+#define Batp (telemetryItems[18].value) //BATT_REMAINING_INDEX
+#define pith (telemetryItems[19].value) //ATTITYE_PITCH_INDEX
+#define roll (telemetryItems[20].value) //ATTITYE_ROLL_INDEX
+#define yawS (telemetryItems[21].value) //ATTITYE_YAW_INDEX
+#define STAB (telemetryItems[22].text)  //FLIGHT_MODE_INDEX
 
-#define FOV 44    //fe. 50°=32, 45°=36, 40°=40, , 35°=44, , 30°=48, , 25°=52 - when the horizon touches TOP or FOOT
 
-#define ARWCX 10
-#define ARWCY 20
+#define Top FH
+#define Foot (LCD_H - 1)
+//#define HRLim (LCD_W - 1)
+#define AHorLLim 0
+#define AHorRLim 94 // disp split
+#define AHorTopLim (Top + 1)
+#define AHorFootLim (Foot - 1)
+#define AHorYcent (Top + ((Foot - 1 - Top) / 2))
+#define AHorXcent (AHorRLim / 2)
+#define FOV 44  // When the horizon touches Top or Foot - fe. 50°=32, 45°=36, 40°=40,	, 35°=44,	, 30°=48,	, 25°=52
 
-#define RSSI  telemetryData.rssi.value
-#define RQly (telemetryItems[2].value)
-#define TPWR (telemetryItems[6].value)
-//#define GPS  (telemetryItems[10].value) //coord
-#define Spd  (telemetryItems[11].value)
-//#define Hdg  (telemetryItems[12].value)
-#define Alt  (telemetryItems[13].value)
-#define Sats (telemetryItems[14].value)
-#define RxBt (telemetryItems[15].value)
-#define Curr (telemetryItems[16].value)
-#define Cons (telemetryItems[17].value) // consum
-#define Batp (telemetryItems[18].value) // Bat%
-#define pitch (telemetryItems[19].value)
-#define roll (telemetryItems[20].value)
-#define yaw  (telemetryItems[21].value)
-#define STAB (telemetryItems[22].text)
+#define CH2Bit(n) channelOutputs[n] / 1024.0f * 128
+#define Rad2Bit(r) r / 628.0f * 128
+#define Rad2Deg(r) r * 180 / 314
+#define Deg2Rad(d) d / 180 * 3.1415f
+// compass
+#define CMPnFielGAU (AHorRLim / 4)
+#define CMPradNwrap(n) channelOutputs[n] / 1024.0f * CMPnFielGAU * 8
+//#define CMPradNwrap (Hedg / 628.0f * CMPnFielGAU * 8)
+#define CMPFielAlig  (AHorXcent  - AHorRLim / 8)
 
-static const uint8_t lut[] = { // sin table fixed SCALE 6
-0,1,2,3,4,6,7,8,9,10,
-11,12,13,14,15,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,
-32,33,34,35,36,37,38,39,39,40,41,42,43,44,44,45,46,47,48,48,
-49,50,50,51,52,52,53,54,54,55,55,56,57,57,58,58,58,59,59,60,
-60,61,61,61,62,62,62,62,63,63,63,63,63,64,64,64,64,64,64,64
+// yaw arrow
+#define ArrwCx 10
+#define ArrwCy 20
+
+static bool upSdo, UaDdraw;
+static uint8_t x, y;
+static int16_t fSin, fCos;
+static int16_t CY;
+static int32_t YY;
+
+static const uint8_t sLut[32]{
+0,6,13,19,25,31,37,43,49,55,60,66,71,76,81,86,91,95,
+99,103,106,110,113,116,118,121,122,124,126,127,127,127
 };
 
-static int8_t fSinCos(int16_t deg, bool f = false) // 0=sin 1=cos
-{
-  if (deg == 0) return f ? lut[89] : 0;
-  deg = f ? deg + 157 : deg;
-  deg = deg * 180 / 314;
-  if (deg >= 360) deg -= 360;
-  uint16_t ab = abs(deg);
+static void fSinCos(int16_t angl) {
+  upSdo = 0;
+  x = angl & 127;
+  if (x >= 64) {
+    x -= 64;
+    upSdo = 1;
+  };
+  if (x >= 32) x = 63 - x;
+  fSin = upSdo ? -sLut[x] : sLut[x];
+  upSdo = 0;
+  x = (angl + 32) & 127;
+  if (x >= 64) {
+    x -= 64;
+    upSdo = 1;
+  };
+  if (x >= 32) x = 63 - x;
+  fCos = upSdo ? -sLut[x] : sLut[x];
+}; // Linear Interpolation  yp = y0 + ((y1-y0)/(x1-x0)) * (xp - x0);
 
-  if (ab == 180) return 0;
-  if (deg == -270 || deg == 90) return lut[89];
-  if (deg == -90 || deg == 270) return -lut[89];
-
-  if (ab < 90) { return lut[ab % 90] * (deg < 0 ? -1 : 1);
-  } else if (ab < 180) { return lut[90 - ab % 90] * (deg < 0 ? -1 : 1);
-  } else if (ab < 270) { return -lut[ab % 90] * (deg < 0 ? -1 : 1);
-  } else { return -lut[90 - ab % 90] * (deg < 0 ? -1 : 1); }
-};
-
-static bool upSdo; // upsidedown 1bool upSdo;
-static bool UaDdraw;
-static uint8_t hoYdrLim(int32_t Y, bool UaD) // hor Y draw limit
-{
-  UaDdraw = 1;
-  if (TOP >= Y){
-    UaDdraw = !UaD;
-    return AHORTOPLIM;
+static void hoYdrLim(int16_t Y) { // hor Y draw limit
+  if (Top >= Y) {
+    UaDdraw = !upSdo;
+    y = AHorTopLim;
+  } else if (Y >= Foot) {
+    UaDdraw = upSdo;
+    y = AHorFootLim;
+  } else {
+    UaDdraw = 1;
+    y = Y;
   }
-  if (Y >= FOOT){
-    UaDdraw = UaD;
-    return AHORFOOTLIM;
-  }
-  return Y;
 };
 
+static const char * timer[3][3] = {"T1:","T2:","T3:"};
+static const char * compRose[8][2] = { "N\0", "NE", "E\0", "SE", "S\0", "SW", "W\0", "NW" };
 
-static void lcdDrawAngLine(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t cx, uint8_t cy, int8_t sin, int8_t cos, uint8_t pat = SOLID, LcdFlags att = 0)
-{
-  x1 = ((((x1 - cx) << 6) * cos) >> 12) + ((((y1 - cy) << 6) * sin) >> 12) + cx;
-  y1 = ((((x1 - cx) << 6) * -sin) >> 12) + ((((y1 - cy) << 6) * cos) >> 12) + cy;
-  x2 = ((((x2 - cx) << 6) * cos) >> 12) + ((((y2 - cy) << 6) * sin) >> 12) + cx;
-  y2 = ((((x2 - cx) << 6) * -sin) >> 12) + ((((y2 - cy) << 6) * cos) >> 12) + cy;
-  lcdDrawLine(x1, y1, x2, y2, pat, att);
-};
-
-void hello_draw() {
-
-// TOP bar:
-  lcdDrawFilledRect(0, 0, LCD_W, TOP, SOLID, 0);
+static void hello_draw() {
+// Top bar: ~280 Flash
+  lcdDrawFilledRect(0, 0, LCD_W, Top, SOLID, 0);
   putsVolts(1, 1, g_vbat100mV, SMLSIZE | INVERS | (IS_TXBATT_WARNING() ? BLINK : 0));
   lcdDrawText(lcdNextPos + 1, 1, "TW:", SMLSIZE | INVERS);
   lcdDrawNumber(lcdNextPos, 1, TPWR, SMLSIZE | INVERS);
   putsModelName(lcdNextPos + 2, 1, g_model.header.name, g_eeGeneral.currModel, SMLSIZE | INVERS);
-  if (g_model.timers[0].mode){
-    lcdDrawText(AHORRLIM - FW - 3, 1, "T1", SMLSIZE | INVERS);
-    drawTimer(lcdNextPos + FW, 1, timersStates[0].val, SMLSIZE | INVERS | (timersStates[0].val < 0 ? BLINK : 0));
+  for (x = 0; x < 3; x++) {
+    if (g_model.timers[x].mode) {
+      lcdDrawText(AHorRLim - FW - 3, 1, timer[0][x], SMLSIZE | INVERS);
+      drawTimer(lcdNextPos + FW, 1, timersStates[x].val, SMLSIZE | INVERS | (timersStates[x].val < 0 ? BLINK : 0));
+    };
   };
-  if (g_model.timers[1].mode){
-    lcdDrawText(AHORRLIM - FW - 3, 1, "T2:", SMLSIZE | INVERS);
-    drawTimer(lcdNextPos + FW, 1, timersStates[1].val, SMLSIZE | INVERS | (timersStates[1].val < 0 ? BLINK : 0));
-  };
+
   // margin line:
-  lcdDrawLine(AHORRLIM + 1, TOP, AHORRLIM + 1, FOOT); // divid
+  lcdDrawLine(AHorRLim + 1, Top, AHorRLim + 1, Foot); // divid
   // vario ?
-  lcdDrawLine(AHORRLIM + 4, TOP, AHORRLIM + 4, FOOT); // divid
+  lcdDrawLine(AHorRLim + 4, Top, AHorRLim + 4, Foot); // divid
 
 // a.horizon:
-  //top
-    drawFlightMode(AHORXCENTER - 2, TOP + 2, mixerCurrentFlightMode, SMLSIZE | RIGHT);
-  lcdDrawText(AHORXCENTER + 2, TOP + 2, STAB, SMLSIZE);
-  // drawValueWithUnit(AHORXCENTER + 2, TOP + 2, STAB, UNIT_TEXT, SMLSIZE);
-  lcdDrawChar(AHORRLIM - 3 * FWNUM, TOP + 2, '\xce', SMLSIZE);
-  // lcdDrawText(AHORRLIM - 3 * FWNUM, TOP + 2, "S:", SMLSIZE);
-  lcdDrawNumber(lcdNextPos, TOP + 2, Sats, SMLSIZE | (Sats < 5 ? BLINK : 0));
+  // top ~100 Flash
+  drawFlightMode(AHorXcent - 2, Top + 2, mixerCurrentFlightMode, SMLSIZE | RIGHT);
+  lcdDrawText(AHorXcent + 2, Top + 2, STAB, SMLSIZE);
+  lcdDrawText(AHorRLim - 3 * FWNUM, Top + 2, "\xd1");
+  lcdDrawNumber(lcdNextPos, Top + 2, Sats, SMLSIZE | (Sats < 5 ? BLINK : 0));
   
-  
-  // pitch
-  // upSdo = abs(pitch) > 79; TODO:  notyet,, the orientation is reversed within 180 + giro ?
-  int16_t ahCy = AHORYCENTER;
-  ahCy += ((FOV << 6) * -fSinCos(pitch)) >> 12;
-  // roll
-  upSdo = abs(roll) > 157;
-  int8_t ahSin = fSinCos(roll), ahCos = fSinCos(roll, true);
-  int16_t ahTan = (ahSin << 6) / (ahCos == 0 ? 1 : ahCos);
+  // upSdo = abs(pith) > 79; TODO:  notyet,, the orientation is reversed within 90 + giro ?
+  CY = AHorYcent;
+  //fSinCos(Rad2Bit(pith));
+  fSinCos(CH2Bit(1) / 4);
+  CY += ((FOV << 7) * -fSin) >> 14;
 
-// ground fill
-  uint8_t ahDy, ahUy;
-  for (uint8_t x = AHORLLIM + 1; x < AHORXCENTER; x++)
-  {
-    ahDy = hoYdrLim(ahCy + ((int32_t)(ahTan * (x << 6)) >> 12), upSdo);
-    if (UaDdraw) lcdDrawLine(AHORXCENTER - x, ahDy, AHORXCENTER - x, (upSdo ? AHORTOPLIM : AHORFOOTLIM));
-    ahUy = hoYdrLim(ahCy - ((int32_t)(ahTan * (x << 6)) >> 12), upSdo);
-    if (UaDdraw) lcdDrawLine(AHORXCENTER + x, ahUy, AHORXCENTER + x, (upSdo ? AHORTOPLIM : AHORFOOTLIM));
+  //fSinCos(Rad2Bit(roll));
+  //upSdo = abs(roll) > 157;
+  fSinCos(CH2Bit(0) / 2);
+  upSdo = abs(CH2Bit(0) / 2) > 32;
+  // ground fill  ~2228 Flash - 16 RAM
+  for (x = AHorLLim + 1; x < AHorXcent; x++) {
+    YY = ((fSin << 7) / (fCos == 0 ? 1 : fCos) * (x << 7)) >> 14;
+    hoYdrLim(CY + YY);
+    if (UaDdraw) lcdDrawLine(AHorXcent - x, y, AHorXcent - x, (upSdo ? AHorTopLim : AHorFootLim));
+    hoYdrLim(CY - YY);
+    if (UaDdraw) lcdDrawLine(AHorXcent + x, y, AHorXcent + x, (upSdo ? AHorTopLim : AHorFootLim));
   };
-  ahCy = hoYdrLim(ahCy,upSdo);
-  if (UaDdraw) lcdDrawLine(AHORXCENTER, ahCy, AHORXCENTER, (upSdo ? AHORTOPLIM : AHORFOOTLIM));
- 
-  // pitch scale line
-  for (uint8_t l = 1; l < 4; l++)
-  {
-    ahUy = hoYdrLim(ahCy - uint8_t(FOV / 4 * l), upSdo);
-    if (UaDdraw) lcdDrawAngLine(AHORXCENTER - ((l == 2) ? 11 : 3), ahUy, AHORXCENTER + ((l == 2) ? 11 : 3), ahUy, AHORXCENTER, ahCy, ahSin, ahCos, DOTTED, 0);
-    ahDy = hoYdrLim(ahCy + uint8_t(FOV / 4 * l), upSdo);
-    if (UaDdraw) lcdDrawAngLine(AHORXCENTER - ((l == 2) ? 11 : 3), ahDy, AHORXCENTER + ((l == 2) ? 11 : 3), ahDy, AHORXCENTER, ahCy, ahSin, ahCos, DOTTED, 0);
-  };
+  hoYdrLim(CY);
+  if (UaDdraw) lcdDrawLine(AHorXcent , y, AHorXcent, (upSdo ? AHorTopLim : AHorFootLim));
+
+   // crosshair :D  ~228 Flash
+    lcdDrawLine(AHorXcent , AHorYcent - 1, AHorXcent, AHorYcent + 1);
+    lcdDrawLine(AHorXcent - 1, AHorYcent, AHorXcent + 1, AHorYcent);
+    lcdDrawLine(AHorXcent - 6, AHorYcent, AHorXcent - 6, AHorYcent + 3);
+    lcdDrawLine(AHorXcent + 6, AHorYcent, AHorXcent + 6, AHorYcent + 3);
+    lcdDrawLine(AHorXcent + 7, AHorYcent, AHorXcent + 15, AHorYcent);
+    lcdDrawLine(AHorXcent - 15, AHorYcent, AHorXcent - 7, AHorYcent);
+
+  // side indicators ~116 Flash
+    lcdDrawFilledRect(AHorLLim, AHorYcent - 5, 3 * FWNUM + 3, FH + 2, SOLID, FORCE);
+    lcdDrawFilledRect(AHorLLim + 1, AHorYcent - 4, 3 * FWNUM + 1, FH, SOLID, ERASE);
+    lcdDrawNumber(AHorLLim + 2, AHorYcent - 3, Sped, SMLSIZE);
+    lcdDrawFilledRect(AHorRLim - 3 * FWNUM - 1, AHorYcent - 5, 3 * FWNUM + 3, FH + 2, SOLID, FORCE);
+    lcdDrawFilledRect(AHorRLim - 3 * FWNUM, AHorYcent - 4, 3 * FWNUM + 1, FH, SOLID, ERASE);
+    lcdDrawNumber(AHorRLim - 3 * FWNUM + 1, AHorYcent - 3, Alti, SMLSIZE);
   
-// yaw arrow
-lcdDrawAngLine(ARWCX, ARWCY - FW, ARWCX - FW, ARWCY + FW, ARWCX, ARWCY, fSinCos(yaw), fSinCos(yaw, 1), SOLID);
-lcdDrawAngLine(ARWCX, ARWCY - FW, ARWCX + FW, ARWCY + FW, ARWCX, ARWCY, fSinCos(yaw), fSinCos(yaw, 1), SOLID);
-
-// crosshair :D
-  lcdDrawLine(AHORXCENTER, AHORYCENTER - 1, AHORXCENTER, AHORYCENTER + 1);
-  lcdDrawLine(AHORXCENTER - 1, AHORYCENTER, AHORXCENTER + 1, AHORYCENTER);
-  lcdDrawLine(AHORXCENTER - 6, AHORYCENTER, AHORXCENTER - 6, AHORYCENTER + 3);
-  lcdDrawLine(AHORXCENTER + 6, AHORYCENTER, AHORXCENTER + 6, AHORYCENTER + 3);
-  lcdDrawLine(AHORXCENTER + 7, AHORYCENTER, AHORXCENTER + 15, AHORYCENTER);
-  lcdDrawLine(AHORXCENTER - 15, AHORYCENTER, AHORXCENTER - 7, AHORYCENTER);
-
-// side indicators
-  lcdDrawFilledRect(AHORLLIM, AHORYCENTER - 5, 3 * FWNUM + 3, FH + 2, SOLID, FORCE);
-  lcdDrawFilledRect(AHORLLIM + 1, AHORYCENTER - 4, 3 * FWNUM + 1, FH, SOLID, ERASE);
-  lcdDrawNumber(AHORLLIM + 2, AHORYCENTER - 3, Spd, SMLSIZE);
-  lcdDrawFilledRect(AHORRLIM - 3 * FWNUM - 1, AHORYCENTER - 5, 3 * FWNUM + 3, FH + 2, SOLID, FORCE);
-  lcdDrawFilledRect(AHORRLIM - 3 * FWNUM, AHORYCENTER - 4, 3 * FWNUM + 1, FH, SOLID, ERASE);
-  lcdDrawNumber(AHORRLIM - 3 * FWNUM + 1, AHORYCENTER - 3, Alt, SMLSIZE);
-
-// botoom
-  /*
-  //lower scales ||| W  |||  S  |||  // 0/360 N  45 NE  90 E  135 SE  180 S  225 SW  270 W  315 NW
-  loop wide/10?
-  lcdDrawLine(x + 1, y, x + 5, y + 4, SOLID, att);
-  */                  
-                 
- lcdDrawFilledRect(AHORRLIM + FW, AHORTOPLIM, 26, FW + 1, SOLID, 0); // B%
-  putsVolts(AHORRLIM + FW, AHORTOPLIM + FH - 1, RxBt, MIDSIZE); //if 12v SMLSIZE
-  lcdDrawNumber(AHORRLIM + FW, AHORTOPLIM + 2 * FH + 4, Curr, SMLSIZE);
-  lcdDrawText(lcdNextPos, AHORTOPLIM + 2 * FH + 4, "A", SMLSIZE);
-  lcdDrawNumber(AHORRLIM + FW, AHORTOPLIM + 3 * FH + 3, Cons, SMLSIZE);
-  lcdDrawText(AHORRLIM + 3 * FW, AHORTOPLIM + 4 * FH + 1, "MAH", TINSIZE);
-  lcdDrawText(AHORRLIM + FW + 1, FOOT - 2 * FH + 2, "R:", TINSIZE);
-  lcdDrawFilledRect(AHORRLIM + FW, FOOT - 2 * FH + 1, 26, FW + 1, SOLID, 0);
-  lcdDrawText(AHORRLIM + FW + 1, FOOT - FH + 2, "Q:", TINSIZE);
-  lcdDrawFilledRect(AHORRLIM + FW, FOOT - FH + 1, 26, FW + 1, SOLID, 0);
+  // botoom:
+  // linear compass rose ~1276 Flash - 8 RAM
+  YY = CMPradNwrap(3);  // head nw wrap
+  YY = (YY < 0) ? (CMPnFielGAU * 8 - abs(YY)) : YY; // -360
+  lcdDrawNumber(20,20,YY);
+  y = (YY > CMPnFielGAU * 7) ? 0 : ((YY + CMPnFielGAU / 2) / CMPnFielGAU); // compRose[n] alig
+   lcdDrawNumber(40,20,y);
+  x = CMPnFielGAU - ((YY + CMPnFielGAU / 2) % CMPnFielGAU); // field centr pos wrap
+  if ((CMPFielAlig + x - 2 * CMPnFielGAU) > (AHorLLim + 3)) lcdDrawText(CMPFielAlig + x - 2 * CMPnFielGAU, Foot - FH + 1, compRose[0][(y - 2 < 0) ? 6 : y - 2], SMLSIZE | INVERS | CENTERED);
+    lcdDrawText(CMPFielAlig + x - CMPnFielGAU, Foot - FH + 1, compRose[0][(y - 1 < 0) ? 7 : y - 1], SMLSIZE | INVERS | CENTERED);
+    lcdDrawText(CMPFielAlig + x, Foot - FH + 1, compRose[0][y], SMLSIZE | INVERS | CENTERED);
+    lcdDrawText(CMPFielAlig + x + CMPnFielGAU, Foot - FH + 1, compRose[0][(y + 1 > 7) ? 0 : y + 1], SMLSIZE | INVERS | CENTERED);
+  if ((CMPFielAlig + x + 2 * CMPnFielGAU) < (AHorRLim - FW)) lcdDrawText(CMPFielAlig + x + 2 * CMPnFielGAU, Foot - FH + 1, compRose[0][(y + 2 > 7) ? 0 : y + 2], SMLSIZE | INVERS | CENTERED);
+  // ladder
+  // home simbol
   
-void hello_stop()
-{
+  // rigth block: ~200 Flash
+  lcdDrawFilledRect(AHorRLim + FW, AHorTopLim, 26, FW + 1, SOLID); // B%
+  putsVolts(AHorRLim + FW, AHorTopLim + FH - 1, RxBt, MIDSIZE); //if 12v SMLSIZE
+  lcdDrawNumber(AHorRLim + FW, AHorTopLim + 2 * FH + 4, Curr, SMLSIZE);
+  lcdDrawText(lcdNextPos, AHorTopLim + 2 * FH + 4, "A", SMLSIZE);
+  lcdDrawNumber(AHorRLim + FW, AHorTopLim + 3 * FH + 3, Cons, SMLSIZE);
+  lcdDrawText(AHorRLim + 3 * FW, AHorTopLim + 4 * FH + 1, "MAH", TINSIZE);
+  lcdDrawText(AHorRLim + FW + 1, Foot - 2 * FH + 2, "R:", TINSIZE | (RSSI < g_model.rssiAlarms.getWarningRssi()) ? BLINK | INVERS | TINSIZE : 0);
+  lcdDrawFilledRect(AHorRLim + FW, Foot - 2 * FH + 1, 26, FW + 1, SOLID);
+  lcdDrawText(AHorRLim + FW + 1, Foot - FH + 2, "Q:", TINSIZE);
+  lcdDrawFilledRect(AHorRLim + FW, Foot - FH + 1, 26, FW + 1, SOLID);
+}
+void hello_run(event_t event) {
+//globalData.cToolRunning = 1;
+if (event == EVT_KEY_FIRST(KEY_UP)) {
+  AUDIO_TRIM_MAX();
+}
+if (event == EVT_KEY_FIRST(KEY_DOWN)) {
+  AUDIO_TRIM_MIN();
+}
+if (event == EVT_KEY_FIRST(KEY_ENTER)) {
+  AUDIO_TRIM_MIDDLE();
+}
+if (event == EVT_KEY_LONG(KEY_EXIT)) {
+  //globalData.cToolRunning = 0;
   popMenu();
+}
+lcdClear();
+hello_draw();
 };
-void hello_run(event_t event)
-{
-  if (event == EVT_KEY_FIRST(KEY_UP))
-  {
-    AUDIO_TRIM_MAX()
-  }
-  if (event == EVT_KEY_FIRST(KEY_DOWN))
-  {
-    AUDIO_TRIM_MIN();
-  }
-   if (event == EVT_KEY_FIRST(KEY_ENTER))
-  {
-    AUDIO_TRIM_MIDDLE();
-  }
-    if (event == EVT_KEY_LONG(KEY_EXIT))
-  {
-    hello_stop();
-  }
-  lcdClear();
-  hello_draw();
-};
+
+
