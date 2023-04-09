@@ -158,9 +158,7 @@ static void hello_draw() {
   // linear compass rose ~1276 Flash - 8 RAM
   YY = CMPradNwrap(3);  // head nw wrap
   YY = (YY < 0) ? (CMPnFielGAU * 8 - abs(YY)) : YY; // -360
-  lcdDrawNumber(20,20,YY);
   y = (YY > CMPnFielGAU * 7) ? 0 : ((YY + CMPnFielGAU / 2) / CMPnFielGAU); // compRose[n] alig
-   lcdDrawNumber(40,20,y);
   x = CMPnFielGAU - ((YY + CMPnFielGAU / 2) % CMPnFielGAU); // field centr pos wrap
   if ((CMPFielAlig + x - 2 * CMPnFielGAU) > (AHorLLim + 3)) lcdDrawText(CMPFielAlig + x - 2 * CMPnFielGAU, Foot - FH + 1, compRose[0][(y - 2 < 0) ? 6 : y - 2], SMLSIZE | INVERS | CENTERED);
     lcdDrawText(CMPFielAlig + x - CMPnFielGAU, Foot - FH + 1, compRose[0][(y - 1 < 0) ? 7 : y - 1], SMLSIZE | INVERS | CENTERED);
